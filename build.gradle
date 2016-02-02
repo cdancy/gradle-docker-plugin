@@ -1,5 +1,5 @@
 group = 'com.bmuschko'
-version = '2.6.5'
+version = '3.0.0-SNAPSHOT'
 
 apply plugin: 'groovy'
 apply plugin: 'idea'
@@ -11,9 +11,24 @@ apply from: "$rootDir/gradle/additional-artifacts.gradle"
 apply from: "$rootDir/gradle/publishing.gradle"
 apply from: "$rootDir/gradle/documentation.gradle"
 apply from: "$rootDir/gradle/release.gradle"
+apply plugin: 'com.jfrog.artifactory'
+
 
 repositories {
+    jcenter()
     mavenCentral()
+    maven { url "${artifactoryURL}/repo" }
+}
+
+buildscript() {
+    repositories {
+        jcenter()
+        mavenCentral()
+        maven { url "${artifactoryURL}/repo" }
+    }
+    dependencies {
+        classpath "org.jfrog.buildinfo:build-info-extractor-gradle:3.1.1"
+    }
 }
 
 dependencies {
@@ -53,5 +68,28 @@ idea.project {
         // Set Gradle home
         def gradleSettings = node.appendNode('component', [name: 'GradleSettings'])
         gradleSettings.appendNode('option', [name: 'SDK_HOME', value: gradle.gradleHomeDir])
+    }
+}
+
+artifactory {
+    contextUrl = artifactoryURL
+    publish {
+        repository {
+            repoKey = version.endsWith('-SNAPSHOT') ? snapshotRepository : releaseRepository
+            username = artifactoryUser
+            password = artifactoryPassword
+            maven = true
+        }
+        defaults {
+            publications ('artifactoryJava')
+        }
+    }
+}
+
+publishing {
+    publications {
+        artifactoryJava (MavenPublication) {
+            from components.java
+        }
     }
 }
