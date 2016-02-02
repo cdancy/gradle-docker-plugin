@@ -34,22 +34,18 @@ class DockerCopyFileToContainer extends DockerExistingContainer {
     String hostPath
 
     /**
-     * Tar based InputStream on host
+     * Tar based file we will extract into container
      */
     @Input
     @Optional
-    InputStream hostStream
+    File tarFile
 
     @Override
     void runRemoteCommand(dockerClient) {
-        try {
-            def containerCommand = dockerClient.copyArchiveToContainerCmd(getContainerId())
-            setContainerCommandConfig(containerCommand)
-            logger.quiet "Copying '${getHostPath()}' to container with ID '${getContainerId()}' at '${getRemotePath()}'."
-            containerCommand.exec()
-        } finally {
-            getHostStream()?.close()
-        }
+        def containerCommand = dockerClient.copyArchiveToContainerCmd(getContainerId())
+        setContainerCommandConfig(containerCommand)
+        logger.quiet "Copying '${getHostPath()}' to container with ID '${getContainerId()}' at '${getRemotePath()}'."
+        containerCommand.exec()
     }
 
     private void setContainerCommandConfig(containerCommand) {
@@ -61,8 +57,8 @@ class DockerCopyFileToContainer extends DockerExistingContainer {
             containerCommand.withHostResource(getHostPath())
         }
 
-        if (getHostStream()) {
-            containerCommand.withTarInputStream(getHostStream())
+        if (getTarFile()) {
+            containerCommand.withTarInputStream(getTarFile().newInputStream())
         }
     }
 }
