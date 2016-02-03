@@ -38,7 +38,7 @@ class DockerCopyFileToContainer extends DockerExistingContainer {
      */
     @Input
     @Optional
-    File tarFile
+    Closure<File> tarFile
 
     @Override
     void runRemoteCommand(dockerClient) {
@@ -58,7 +58,7 @@ class DockerCopyFileToContainer extends DockerExistingContainer {
         }
 
         if (getTarFile()) {
-            containerCommand.withTarInputStream(getTarFile().newInputStream())
+            containerCommand.withTarInputStream(getTarFile().call().newInputStream())
         }
     }
 }
