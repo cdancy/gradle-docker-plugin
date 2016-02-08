@@ -313,6 +313,72 @@ class DockerWorkflowFunctionalTest extends AbstractFunctionalTest {
                 new File("$projectDir/copy-dir").exists()
     }
 
+    def "Can build an image only once"() {
+        File imageDir = temporaryFolder.newFolder('images', 'minimal')
+        createDockerfile(imageDir)
+
+        String uniqueImageId = createUniqueImageId()
+
+        buildFile << """
+            import com.bmuschko.gradle.docker.tasks.image.DockerBuildImage
+
+            task buildImage(type: DockerBuildImage) {
+                inputDir = file('images/minimal')
+                tag = "${uniqueImageId}"
+            }
+
+            task buildImageAgain(type: DockerBuildImage) {
+                dependsOn buildImage
+                inputDir = file('images/minimal')
+                tag = "${uniqueImageId}"
+            }
+
+            task workflow {
+                dependsOn buildImageAgain
+            }
+        """
+
+        expect:
+        BuildResult result = build('workflow')
+        result.standardOutput.contains("UP-TO-DATE")
+    }
+
+    def "Can build an image, create a container and expose a port"() {
+
+        String uniqueContainerName = createUniqueContainerName()
+
+        buildFile << """
+            import com.bmuschko.gradle.docker.tasks.image.DockerBuildImage
+            import com.bmuschko.gradle.docker.tasks.container.DockerCreateContainer
+            import com.bmuschko.gradle.docker.tasks.container.DockerInspectContainer
+
+            task buildImage(type: DockerBuildImage) {
+                inputDir = file('images/minimal')
+                tag = "${createUniqueImageId()}"
+            }
+
+            task createContainer(type: DockerCreateContainer) {
+                dependsOn buildImage
+                targetImageId { buildImage.getImageId() }
+                containerName = "${uniqueContainerName}"
+                exposePorts("tcp", [9999])
+            }
+
+            task inspectContainer(type: DockerInspectContainer) {
+                dependsOn createContainer
+                targetContainerId { createContainer.getContainerId() }
+            }
+
+            task workflow {
+                dependsOn inspectContainer
+            }
+        """
+
+        expect:
+        BuildResult result = build('workflow')
+        result.standardOutput.contains("ExposedPorts : [9999/tcp]")
+    }
+
     private File createDockerfile(File imageDir) {
         File dockerFile = new File(imageDir, 'Dockerfile')
 
