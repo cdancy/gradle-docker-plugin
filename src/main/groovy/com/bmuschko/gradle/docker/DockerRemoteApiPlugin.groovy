@@ -57,6 +57,15 @@ class DockerRemoteApiPlugin implements Plugin<Project> {
                 dependencies.add(project.dependencies.create('cglib:cglib:3.2.0'))
             }
 
+            // use latest version of netty libraries which has fix for improper pom encoding
+            config.resolutionStrategy {
+                eachDependency {
+                    if (it.requested.group == 'io.netty') {
+                        it.useVersion '4.1.0.CR2'
+                    }
+                }
+            }
+
             group = DEFAULT_TASK_GROUP
             threadContextClassLoader = dockerClassLoader
 
