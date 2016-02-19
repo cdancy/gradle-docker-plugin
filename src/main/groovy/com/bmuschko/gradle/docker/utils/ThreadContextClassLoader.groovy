@@ -30,6 +30,14 @@ interface ThreadContextClassLoader {
     void withClasspath(Set<File> classpathFiles, Closure closure)
 
     /**
+     * Loads class with given name from thread context classloader.
+     *
+     * @param className Class name
+     * @return Class
+     */
+    Class loadClass(String className)
+
+    /**
      * Creates instance of <a href="https://github.com/docker-java/docker-java/blob/master/src/main/java/com/github/dockerjava/api/model/AuthConfig.java">AuthConfig</a>
      * from the thread context classloader.
      *

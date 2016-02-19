@@ -24,11 +24,13 @@ import java.lang.reflect.Constructor
 import java.lang.reflect.Method
 
 class DockerThreadContextClassLoader implements ThreadContextClassLoader {
+    public static final String CORE_PACKAGE = 'com.github.dockerjava.core'
+    public static final String COMMAND_PACKAGE = "com.github.dockerjava.core.command"
     public static final String MODEL_PACKAGE = 'com.github.dockerjava.api.model'
-    public static final String COMMAND_PACKAGE = 'com.github.dockerjava.core.command'
 
     private final Map<String, String> dockerClientConfiguration
     private def dockerClient
+    private ClassLoader dockerClientClassLoader
 
     DockerThreadContextClassLoader(Map<String, String> dockerClientConfiguration) {
         this.dockerClientConfiguration = dockerClientConfiguration
@@ -39,22 +41,15 @@ class DockerThreadContextClassLoader implements ThreadContextClassLoader {
      */
     @Override
     void withClasspath(Set<File> classpathFiles, Closure closure) {
-        ClassLoader originalClassLoader = getClass().classLoader
 
-        try {
-            Thread.currentThread().contextClassLoader = createClassLoader(classpathFiles)
-            closure.resolveStrategy = Closure.DELEGATE_FIRST
-            closure.delegate = this
-
-            if (!dockerClient) {
-                dockerClient = new DockerClientFactory().getInstance(dockerClientConfiguration)
-            }
-
-            closure(dockerClient)
+        if (!dockerClient) {
+            dockerClientClassLoader = createClassLoader(classpathFiles)
+            dockerClient = new DockerClientFactory().getInstance(dockerClientConfiguration)
         }
-        finally {
-            Thread.currentThread().contextClassLoader = originalClassLoader
-        }
+
+        closure.resolveStrategy = Closure.DELEGATE_FIRST
+        closure.delegate = this
+        closure(dockerClient)
     }
 
     /**
@@ -77,11 +72,13 @@ class DockerThreadContextClassLoader implements ThreadContextClassLoader {
         files.collect { file -> file.toURI().toURL() } as URL[]
     }
 
-   private static class DockerClientFactory {
-        private final Class configClass = DockerThreadContextClassLoader.loadClass('com.github.dockerjava.core.DockerClientConfig')
-        private final Class builderClass = DockerThreadContextClassLoader.loadClass('com.github.dockerjava.core.DockerClientBuilder')
+    private class DockerClientFactory {
 
         def getInstance(Map<String, String> configuration) {
+
+            Class configClass = loadDockerClientConfigClass()
+            Class builderClass = loadDockerClientBuilderClass()
+
             def configBuilder = configClass
                     .getMethod('createDefaultConfigBuilder')
                     .invoke(null)
@@ -89,26 +86,26 @@ class DockerThreadContextClassLoader implements ThreadContextClassLoader {
             configBuilder.with {
                 withUri configuration.url
                 withDockerCertPath configuration.certPath?.canonicalPath
-                withVersion configuration.apiVersion ?: getApiVersion(build())
-                createClient build()
+                withVersion configuration.apiVersion ?: getApiVersion(build(), configClass, builderClass)
+                createClient build(), configClass, builderClass
             }
         }
 
-       private def createClient(def configuration) {
-           def clientBuilder = builderClass
-                   .getMethod('getInstance', configClass)
-                   .invoke(null, configuration)
-           return clientBuilder.build()
-       }
+        private def createClient(def configuration, Class configClass, Class builderClass) {
+            def clientBuilder = builderClass
+                    .getMethod('getInstance', configClass)
+                    .invoke(null, configuration)
+            clientBuilder.build()
+        }
 
-       private String getApiVersion(def configuration) {
-           def client = createClient(configuration)
-           return client.versionCmd().exec().apiVersion
-       }
-   }
+        private String getApiVersion(def configuration, Class configClass, Class builderClass) {
+            def client = createClient(configuration, configClass, builderClass)
+            client.versionCmd().exec().apiVersion
+        }
+    }
 
-    static Class loadClass(String className) {
-        Thread.currentThread().contextClassLoader.loadClass(className)
+    Class loadClass(String className) {
+        (dockerClientClassLoader ?: Thread.currentThread().contextClassLoader).loadClass(className)
     }
 
     /**
@@ -379,5 +376,13 @@ class DockerThreadContextClassLoader implements ThreadContextClassLoader {
 
     private Class loadBindClass() {
         loadClass("${MODEL_PACKAGE}.Bind")
+    }
+
+    private Class loadDockerClientConfigClass() {
+        loadClass("${CORE_PACKAGE}.DockerClientConfig")
+    }
+
+    private Class loadDockerClientBuilderClass() {
+        loadClass("${CORE_PACKAGE}.DockerClientBuilder")
     }
 }
