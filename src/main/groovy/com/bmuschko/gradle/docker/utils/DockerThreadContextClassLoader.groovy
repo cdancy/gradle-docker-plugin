@@ -24,13 +24,11 @@ import java.lang.reflect.Constructor
 import java.lang.reflect.Method
 
 class DockerThreadContextClassLoader implements ThreadContextClassLoader {
-    public static final String CORE_PACKAGE = 'com.github.dockerjava.core'
     public static final String COMMAND_PACKAGE = "com.github.dockerjava.core.command"
     public static final String MODEL_PACKAGE = 'com.github.dockerjava.api.model'
 
     private final Map<String, String> dockerClientConfiguration
     private def dockerClient
-    private ClassLoader dockerClientClassLoader
 
     DockerThreadContextClassLoader(Map<String, String> dockerClientConfiguration) {
         this.dockerClientConfiguration = dockerClientConfiguration
@@ -43,8 +41,9 @@ class DockerThreadContextClassLoader implements ThreadContextClassLoader {
     void withClasspath(Set<File> classpathFiles, Closure closure) {
 
         if (!dockerClient) {
-            dockerClientClassLoader = createClassLoader(classpathFiles)
-            dockerClient = new DockerClientFactory().getInstance(dockerClientConfiguration)
+            dockerClient = new DockerClientFactory().
+                    getInstance(dockerClientConfiguration,
+                            createClassLoader(classpathFiles))
         }
 
         closure.resolveStrategy = Closure.DELEGATE_FIRST
@@ -74,10 +73,10 @@ class DockerThreadContextClassLoader implements ThreadContextClassLoader {
 
     private class DockerClientFactory {
 
-        def getInstance(Map<String, String> configuration) {
+        def getInstance(Map<String, String> configuration, ClassLoader classLoader) {
 
-            Class configClass = loadDockerClientConfigClass()
-            Class builderClass = loadDockerClientBuilderClass()
+            Class configClass = loadClass(classLoader, 'com.github.dockerjava.core.DockerClientConfig')
+            Class builderClass = loadClass(classLoader, 'com.github.dockerjava.core.DockerClientBuilder')
 
             def configBuilder = configClass
                     .getMethod('createDefaultConfigBuilder')
@@ -104,8 +103,13 @@ class DockerThreadContextClassLoader implements ThreadContextClassLoader {
         }
     }
 
+    @Override
     Class loadClass(String className) {
-        (dockerClientClassLoader ?: Thread.currentThread().contextClassLoader).loadClass(className)
+        loadClass(dockerClient.class.classLoader, className)
+    }
+
+    Class loadClass(ClassLoader classLoader, String className) {
+        classLoader.loadClass(className)
     }
 
     /**
@@ -376,13 +380,5 @@ class DockerThreadContextClassLoader implements ThreadContextClassLoader {
 
     private Class loadBindClass() {
         loadClass("${MODEL_PACKAGE}.Bind")
-    }
-
-    private Class loadDockerClientConfigClass() {
-        loadClass("${CORE_PACKAGE}.DockerClientConfig")
-    }
-
-    private Class loadDockerClientBuilderClass() {
-        loadClass("${CORE_PACKAGE}.DockerClientBuilder")
     }
 }
