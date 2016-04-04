@@ -18,6 +18,7 @@ package com.bmuschko.gradle.docker.utils
 import com.bmuschko.gradle.docker.DockerRegistryCredentials
 import com.bmuschko.gradle.docker.tasks.DockerClientConfiguration
 import com.bmuschko.gradle.docker.tasks.container.DockerCreateContainer
+import org.gradle.api.GradleException
 import org.gradle.api.logging.Logger
 
 import java.lang.reflect.Array
@@ -338,18 +339,54 @@ class DockerThreadContextClassLoader implements ThreadContextClassLoader {
         createCallback("${COMMAND_PACKAGE}.PullImageResultCallback")
     }
 
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    def createLoggingCallback(Logger logger) {
+        Class callbackClass = loadClass("${COMMAND_PACKAGE}.LogContainerResultCallback")
+        def delegate = callbackClass.getConstructor().newInstance()
+
+        Class enhancerClass = loadClass('net.sf.cglib.proxy.Enhancer')
+        def enhancer = enhancerClass.getConstructor().newInstance()
+        enhancer.setSuperclass(callbackClass)
+        enhancer.setCallback([
+
+            invoke: {Object proxy, java.lang.reflect.Method method, Object[] args ->
+                if ("onNext" == method.name && args.length && args[0]) {
+                  def frame = args[0]
+                  switch (frame.streamType as String) {
+                    case "STDOUT":
+                    case "RAW":
+                        logger.quiet(new String(frame.payload))
+                        break
+                    case "STDERR":
+                        logger.error(new String(frame.payload))
+                        break
+                  }
+                }
+                method.invoke(delegate, args)
+            }
+
+        ].asType(loadClass('net.sf.cglib.proxy.InvocationHandler')))
+
+        enhancer.create()
+    }
+
     private createPrintStreamProxyCallback(Logger logger, delegate) {
         Class enhancerClass = loadClass('net.sf.cglib.proxy.Enhancer')
         def enhancer = enhancerClass.getConstructor().newInstance()
         enhancer.setSuperclass(delegate.getClass())
         enhancer.setCallback([
 
-                invoke: {Object proxy, Method method, Object[] args ->
-                    if ("onNext" == method.name) {
-                        logger.info(args[0].stream)
-                    }
-                    method.invoke(delegate, args)
+            invoke: {Object proxy, Method method, Object[] args ->
+                if ("onNext" == method.name) {
+                    def possibleStream = args[0].stream
+                    if (possibleStream)
+                        logger.quiet(possibleStream)
                 }
+                method.invoke(delegate, args)
+            }
 
         ].asType(loadClass('net.sf.cglib.proxy.InvocationHandler')))
 
