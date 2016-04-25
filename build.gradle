@@ -1,5 +1,5 @@
 group = 'com.bmuschko'
-version = '4.0.0-SNAPSHOT'
+version = '4.0.1'
 
 apply plugin: 'groovy'
 apply plugin: 'idea'
