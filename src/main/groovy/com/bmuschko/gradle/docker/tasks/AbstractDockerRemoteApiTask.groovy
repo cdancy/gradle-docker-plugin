@@ -25,13 +25,15 @@ abstract class AbstractDockerRemoteApiTask extends DefaultTask {
      * Classpath for Docker Java libraries.
      */
     @InputFiles
+    @Optional
     FileCollection classpath
 
     /**
      * Docker remote API server URL. Defaults to "http://localhost:2375".
      */
     @Input
-    String url = 'http://localhost:2375'
+    @Optional
+    String url
 
     /**
      * Path to the <a href="https://docs.docker.com/articles/https/">Docker certificate and key</a>.
@@ -39,6 +41,13 @@ abstract class AbstractDockerRemoteApiTask extends DefaultTask {
     @InputDirectory
     @Optional
     File certPath
+
+    /**
+     * The docker remote api version
+     */
+    @Input
+    @Optional
+    String apiVersion
 
     ThreadContextClassLoader threadContextClassLoader
 
@@ -50,13 +59,14 @@ abstract class AbstractDockerRemoteApiTask extends DefaultTask {
     }
 
     void runInDockerClassPath(Closure closure) {
-        threadContextClassLoader.withClasspath(getClasspath().files, createDockerClientConfig(), closure)
+        threadContextClassLoader.withClasspath(getClasspath()?.files, createDockerClientConfig(), closure)
     }
 
     private DockerClientConfiguration createDockerClientConfig() {
         DockerClientConfiguration dockerClientConfig = new DockerClientConfiguration()
         dockerClientConfig.url = getUrl()
         dockerClientConfig.certPath = getCertPath()
+        dockerClientConfig.apiVersion = getApiVersion()
         dockerClientConfig
     }
 
